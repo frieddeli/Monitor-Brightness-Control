@@ -28,10 +28,25 @@ for monitor in get_monitors():
             print(f"  Error interacting with monitor: {e}")\
                 
                 
-# Change the brightness of the first monitor
-if monitor_brightness:
-    monitor = list(monitor_brightness.keys())[0] # get the first monitor
-    ChangeBrightness(monitor, monitor_brightness[monitor]) # call the function to change the brightness of the monitor
-    
+#poll the keyboard for keypresses of the hotkey
+while True:
+    try:
+        #increase brightness 
+        if keyboard.is_pressed('crtl+arrow-up'):
+            print("Hotkey pressed")
+            for monitor in monitor_brightness:
+                ChangeBrightness(monitor, monitor_brightness[monitor]+10) # increase the brightness by 10
+            time.sleep(1)
+        #decrease brightness
+        if keyboard.is_pressed('function+arrow-down'):
+            print("Hotkey pressed")
+            for monitor in monitor_brightness:
+                ChangeBrightness(monitor, monitor_brightness[monitor]-10) # decrease the brightness by 10
+            time.sleep(1)
+            
+    except Exception as e:
+        print(f"Error polling keyboard: {e}")
+        break
+    time.sleep(0.1)
 
 
