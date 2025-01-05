@@ -4,7 +4,11 @@ import logging
 from monitorcontrol import get_monitors
 
 
-
+#function to retrieve the monitors connected to the computer
+def RetrieveMonitors():
+    monitors = get_monitors()
+    print(f"Detected monitors: {monitors}")
+    return monitors
 
 #function to change the brightness of a monitor
 def ChangeBrightness(monitor, brightness):
