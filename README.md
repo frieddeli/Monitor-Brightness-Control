@@ -1,29 +1,47 @@
-# BrightnessControlWithKeys
+# Monitor Brightness Control
 
+A Windows system tray application for controlling monitor brightness across multiple displays. Features a modern Windows 11-style UI with smooth animations and global hotkeys.
 
-BrightnessControlWithLeys is a Python application that allows users to adjust the brightness of all connected monitors using keyboard shortcuts. It provides a simple GUI built with Qt and listens for specific key presses to modify brightness levels seamlessly.
+## Download
+
+EXE version provided 
+Clone to build fron source
 
 ## Features
 
-- **Keyboard Shortcuts**: Adjust brightness using `Ctrl + Up` to increase and `Ctrl + Down` to decrease.
-- **Real-time Feedback**: Displays current brightness levels and updates in real-time.
-- **Cross-Monitor Support**: Manage brightness for multiple monitors simultaneously.
-- **Admin Privileges**: Ensures necessary permissions for adjusting system settings.
+✨ Modern floating slider UI with animations  
+🎮 Global hotkeys (Ctrl + Up/Down)  
+🖥️ Multi-monitor support  
+🚀 Auto-starts with Windows  
+🎯 System tray integration  
+⚙️ DDC/CI monitor control
 
-## Installation
-Comes in EXE(see dist folder) and python source 
+## Usage
 
-### Prerequisites
+- System Tray:
+  - Left click: Show brightness slider
+  - Right click: Menu options
+- Keyboard:
+  - `Ctrl + ↑`: Increase brightness
+  - `Ctrl + ↓`: Decrease brightness
 
-- Python 3.7 or higher
-- Pip package manager
+## Requirements
 
-### Contributing
-Contributions are welcome! Please open an issue or submit a pull request for improvements.
+- Windows 10/11
+- DDC/CI compatible monitors
+- Administrator privileges
+
+### Technical Details
+Built with Python & PyQt5
+Uses DDC/CI protocol for monitor control
+Windows Registry integration for auto-start
+Smooth animations with QPropertyAnimation
+Efficient debounced brightness control
+
+### Known Issues
+Some monitors may not support DDC/CI
+Requires admin privileges for first run
+May need manual startup addition on some systems
 
 ### License
-MIT License
-
-### Acknowledgments
-Utilizes the keyboard library for handling key events.
-Built with Qt for the GUI components.
+MIT License 
