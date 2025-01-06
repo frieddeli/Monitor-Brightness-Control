@@ -32,16 +32,16 @@ Clone to build fron source
 - Administrator privileges
 
 ### Technical Details
-Built with Python & PyQt5
-Uses DDC/CI protocol for monitor control
-Windows Registry integration for auto-start
-Smooth animations with QPropertyAnimation
-Efficient debounced brightness control
+- Built with Python & PyQt5
+- Uses DDC/CI protocol for monitor control
+- Windows Registry integration for auto-start
+- Smooth animations with QPropertyAnimation
+- Efficient debounced brightness control
 
 ### Known Issues
-Some monitors may not support DDC/CI
-Requires admin privileges for first run
-May need manual startup addition on some systems
+- Some monitors may not support DDC/CI
+- Requires admin privileges for first run
+- May need manual startup addition on some systems
 
 ### License
-MIT License 
+- MIT License 
