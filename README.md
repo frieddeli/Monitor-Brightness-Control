@@ -9,7 +9,7 @@ A Windows system tray application for controlling monitor brightness across mult
 
 ## Download
 
-- EXE version provided 
+- EXE version provided under dist folder
 - Clone to build fron source
 
 ## Features
