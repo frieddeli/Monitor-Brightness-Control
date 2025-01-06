@@ -9,6 +9,8 @@ import logging
 from typing import List
 import winreg
 from modules import create_sun_pixmap
+import win32con
+import win32gui
 
 # Constants
 SLIDER_WIDTH = 240
@@ -30,7 +32,7 @@ FADE_OUT_DURATION = 1000  # milliseconds
 APP_NAME = "MonitorBrightnessApp"
 
 # Setup logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # Debug dictionaries to store brightness levels by monitor index
@@ -40,18 +42,23 @@ last_brightness = {}
 # Cached list of monitor objects
 cached_monitors: List = []
 
+def show_user_message(title, message):
+    """Shows a user-friendly message dialog."""
+    msg = QtWidgets.QMessageBox()
+    msg.setWindowTitle(title)
+    msg.setText(message)
+    msg.setIcon(QtWidgets.QMessageBox.Information)
+    msg.exec_()
+
 def ensure_admin():
     """
     Checks if the current process has administrator privileges on Windows.
     If not, attempts to restart the script with admin rights.
     Ensures this request happens only once by setting a registry key.
     """
-    logger.debug("Checking for admin privileges...")
     try:
         is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-        logger.debug(f"Is user admin: {is_admin}")
     except Exception as e:
-        logger.error(f"Exception while checking admin status: {e}")
         is_admin = False
 
     if not is_admin:
@@ -64,7 +71,6 @@ def ensure_admin():
             admin_requested = False
 
         if not admin_requested:
-            logger.debug("Relaunching script with admin rights...")
             try:
                 ctypes.windll.shell32.ShellExecuteW(
                     None, "runas",
@@ -77,7 +83,7 @@ def ensure_admin():
                 winreg.SetValueEx(app_key, "AdminRequested", 0, winreg.REG_SZ, "True")
                 winreg.CloseKey(app_key)
             except Exception as e:
-                logger.error(f"Failed to relaunch as admin: {e}")
+                show_user_message("Error", "Administrator privileges are required to run this application.")
             sys.exit()
 
 def add_to_startup():
@@ -91,9 +97,8 @@ def add_to_startup():
                              0, winreg.KEY_SET_VALUE)
         winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, exe_path)
         winreg.CloseKey(key)
-        logger.debug("Added to startup successfully.")
     except Exception as e:
-        logger.error(f"Failed to add to startup: {e}")
+        show_user_message("Warning", "Could not add application to startup. You'll need to start it manually.")
 
 def RetrieveMonitors() -> List:
     """
@@ -104,23 +109,22 @@ def RetrieveMonitors() -> List:
         List of Monitor objects from the monitorcontrol library.
     """
     global cached_monitors
-    logger.debug("Retrieving monitors...")
-    monitors = get_monitors()
-    cached_monitors = monitors  # Cache the monitors for later use
-    logger.debug(f"Detected monitors: {monitors}")
+    try:
+        monitors = get_monitors()
+        cached_monitors = monitors  # Cache the monitors for later use
 
-    for idx, monitor in enumerate(monitors):
-        with monitor:
-            try:
-                brightness = monitor.get_luminance()
-                brightness = round(brightness, -1)
-                monitor_brightness[idx] = brightness
-                last_brightness[idx] = brightness
-                logger.debug(f"Monitor {idx} brightness initialized to: {brightness}")
-            except Exception as e:
-                logger.error(f"Error retrieving brightness for Monitor {idx}: {e}")
-                if hasattr(e, 'response'):
-                    logger.debug(f"Raw response: {e.response}")
+        for idx, monitor in enumerate(monitors):
+            with monitor:
+                try:
+                    brightness = monitor.get_luminance()
+                    brightness = round(brightness, -1)
+                    monitor_brightness[idx] = brightness
+                    last_brightness[idx] = brightness
+                except Exception as e:
+                    if hasattr(e, 'response'):
+                        pass
+    except Exception as e:
+        show_user_message("Error", "Failed to detect monitors. Please ensure your monitors support DDC/CI.")
     return monitors
 
 def ChangeBrightness(idx: int, brightness: int):
@@ -133,38 +137,29 @@ def ChangeBrightness(idx: int, brightness: int):
     """
     global cached_monitors
     if idx < 0 or idx >= len(cached_monitors):
-        logger.debug(f"Invalid monitor index: {idx}")
         return
 
     monitor = cached_monitors[idx]
-    logger.debug(f"Attempting to set brightness of Monitor {idx} to {brightness}...")
     try:
         with monitor:
             monitor.set_luminance(brightness)
-        logger.debug(f"Brightness set to {brightness} for Monitor {idx}")
     except Exception as e:
-        logger.error(f"Exception while setting brightness for Monitor {idx} to {brightness}: {e}")
-    logger.debug(f"Finished setting brightness to: {brightness} for Monitor {idx}")
+        show_user_message("Error", f"Failed to change brightness for Monitor {idx+1}")
 
 def RetrieveBrightness():
     """
     Retrieves current brightness for all monitors and updates the dictionaries.
     """
-    logger.debug("Retrieving current brightness for all monitors...")
     for idx, monitor in enumerate(cached_monitors):
-        logger.debug(f"Monitor {idx}: {monitor}")
         try:
             with monitor:
                 brightness = monitor.get_luminance()
-            logger.debug(f"Current Brightness for Monitor {idx}: {brightness}")
             brightness = round(brightness, -1)
             monitor_brightness[idx] = brightness
             last_brightness[idx] = brightness
-            logger.debug(f"Brightness rounded to: {brightness} for Monitor {idx}")
         except Exception as e:
-            logger.error(f"Error interacting with Monitor {idx}: {e}")
             if hasattr(e, 'response'):
-                logger.debug(f"Raw response: {e.response}")
+                pass
 
 
 class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
@@ -179,6 +174,11 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
         if reason == self.Trigger:
             self.parent().show_slider(INITIAL_BRIGHTNESS)
 
+def hide_console():
+    """Hide the console window"""
+    window = win32gui.GetForegroundWindow()
+    win32gui.ShowWindow(window, win32con.SW_HIDE)
+
 class BrightnessSlider(QtWidgets.QWidget):
     """
     A widget for displaying and adjusting the brightness slider.
@@ -189,29 +189,32 @@ class BrightnessSlider(QtWidgets.QWidget):
     update_slider_signal = QtCore.pyqtSignal(int)
 
     def __init__(self):
-        logger.debug("Initializing BrightnessSlider...")
         super().__init__()
 
-        # Keep the window always on top and frameless
+        # Modified window flags and attributes
         self.setWindowFlags(
             QtCore.Qt.WindowStaysOnTopHint |
             QtCore.Qt.FramelessWindowHint |
-            QtCore.Qt.Tool
+            QtCore.Qt.Tool |
+            QtCore.Qt.MSWindowsFixedSizeDialogHint  # Add this instead of NoDropShadowWindowHint
         )
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
-        self.setWindowOpacity(WINDOW_OPACITY)  # Start fully transparent
-
+        self.setAttribute(QtCore.Qt.WA_ShowWithoutActivating)
+        
+        # Add fixed size to prevent geometry issues
+        self.setFixedSize(SLIDER_WIDTH + 2 * MARGIN, SLIDER_HEIGHT + 2 * MARGIN)
+        
         # Positioning the slider near the bottom center of the screen
         screen_geometry = QtWidgets.QApplication.primaryScreen().availableGeometry()
-        x = (screen_geometry.width() - SLIDER_WIDTH) // 2
-        y = screen_geometry.height() - SLIDER_HEIGHT - GEOMETRY_OFFSET_Y
-        self.setGeometry(x, y, SLIDER_WIDTH, SLIDER_HEIGHT)
-        logger.debug(f"Slider geometry set to: x={x}, y={y}, width={SLIDER_WIDTH}, height={SLIDER_HEIGHT}")
+        x = (screen_geometry.width() - self.width()) // 2
+        y = screen_geometry.height() - self.height() - GEOMETRY_OFFSET_Y
+        self.setGeometry(x, y, self.width(), self.height())
 
         # Main layout
         layout = QtWidgets.QHBoxLayout()
         layout.setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN)
         layout.setSpacing(SPACING)
+        layout.setAlignment(QtCore.Qt.AlignCenter)
 
         # Insert Custom Icon (Programmatically Drawn)
         self.icon = self.create_icon()
@@ -227,7 +230,6 @@ class BrightnessSlider(QtWidgets.QWidget):
 
         self.setLayout(layout)
         self.hide()
-        logger.debug("BrightnessSlider initialized and hidden by default.")
 
         self.update_slider_signal.connect(self.handle_update_slider)
 
@@ -251,7 +253,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         shadow.setYOffset(0)
         shadow.setColor(QtGui.QColor(0, 0, 0, 100))
         self.setGraphicsEffect(shadow)
-        logger.debug("Drop shadow effect applied to BrightnessSlider.")
 
         # Apply stylesheet for enhanced styling
         self.apply_stylesheet()
@@ -270,7 +271,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         self.fade_out.setEndValue(0.0)
         self.fade_out.setEasingCurve(QtCore.QEasingCurve.InOutQuad)
         self.fade_out.finished.connect(self.hide)
-        logger.debug("Animations initialized with extended fade-out duration.")
 
     def apply_stylesheet(self):
         """
@@ -311,7 +311,6 @@ class BrightnessSlider(QtWidgets.QWidget):
                 border-radius: 4px;
             }
         """)
-        logger.debug("Stylesheet applied to BrightnessSlider.")
 
     def create_icon(self) -> QtWidgets.QLabel:
         """
@@ -357,7 +356,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         slider.setTickInterval(TICK_INTERVAL)
         slider.setSingleStep(1)
         slider.valueChanged.connect(self.slider_moved)
-        logger.debug("Slider created and initialized.")
         return slider
 
 
@@ -370,7 +368,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         Args:
             value (int): The new slider value.
         """
-        logger.debug(f"slider_moved called with value: {value}")
         self.percent_label.setText(f"{value}%")
         self.latest_brightness = value
 
@@ -387,15 +384,13 @@ class BrightnessSlider(QtWidgets.QWidget):
         Applies the brightness change for all monitors to the latest value set by the slider.
         """
         value = self.latest_brightness
-        logger.debug(f"Applying brightness change to: {value}%")
         for idx in monitor_brightness:
             try:
                 ChangeBrightness(idx, value)
                 monitor_brightness[idx] = value
                 last_brightness[idx] = value
-                logger.debug(f"Updated Monitor {idx} brightness to: {value}")
             except Exception as e:
-                logger.error(f"Failed to update brightness for Monitor {idx} to {value}: {e}")
+                show_user_message("Error", f"Could not adjust brightness for Monitor {idx+1}")
 
     def show_slider(self, value: int = INITIAL_BRIGHTNESS):
         """
@@ -405,7 +400,11 @@ class BrightnessSlider(QtWidgets.QWidget):
         Args:
             value (int): The brightness value to set.
         """
-        logger.debug(f"show_slider called with value: {value}")
+        # Ensure proper positioning before showing
+        screen_geometry = QtWidgets.QApplication.primaryScreen().availableGeometry()
+        x = (screen_geometry.width() - self.width()) // 2
+        y = screen_geometry.height() - self.height() - GEOMETRY_OFFSET_Y
+        self.setGeometry(x, y, self.width(), self.height())
         self.update_slider_signal.emit(value)
 
     @QtCore.pyqtSlot(int)
@@ -417,7 +416,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         Args:
             value (int): The brightness value to set.
         """
-        logger.debug(f"handle_update_slider called with value: {value}")
         if not self.isVisible():
             self.setWindowOpacity(0.0)
             self.show()
@@ -429,13 +427,11 @@ class BrightnessSlider(QtWidgets.QWidget):
         # Reset inactivity timer to keep it on screen while user is active
         self.inactivity_timer.stop()
         self.inactivity_timer.start()
-        logger.debug("Inactivity timer reset.")
 
     def start_fade_out(self):
         """
         Initiates the fade-out animation after a period of inactivity.
         """
-        logger.debug("Starting fade-out animation.")
         self.fade_out.start()
 
 class KeyboardListener(QtCore.QThread):
@@ -446,10 +442,8 @@ class KeyboardListener(QtCore.QThread):
     brightness_changed = QtCore.pyqtSignal(int)
 
     def run(self):
-        logger.debug("KeyboardListener thread started.")
         keyboard.on_press(self.on_key_press)
         keyboard.wait()
-        logger.debug("KeyboardListener thread ending.")
 
     def on_key_press(self, event):
         """
@@ -460,7 +454,6 @@ class KeyboardListener(QtCore.QThread):
             event: The keyboard event.
         """
         if keyboard.is_pressed('ctrl'):
-            logger.debug("Ctrl key is pressed.")
             for idx in list(monitor_brightness.keys()):
                 try:
                     if keyboard.is_pressed('up'):
@@ -472,19 +465,16 @@ class KeyboardListener(QtCore.QThread):
 
                     # Validate target_brightness
                     if target_brightness < 0 or target_brightness > 100:
-                        logger.debug(f"TargetBrightness {target_brightness} is out of bounds for Monitor {idx}. Skipping.")
                         continue
 
                     if target_brightness != last_brightness.get(idx, -1):
                         ChangeBrightness(idx, target_brightness)
                         monitor_brightness[idx] = target_brightness
                         last_brightness[idx] = target_brightness
-                        logger.debug(f"Brightness for Monitor {idx} set to {target_brightness}")
                         # Emit signal to update the slider
                         self.brightness_changed.emit(target_brightness)
-                        logger.debug(f"brightness_changed signal emitted with value: {target_brightness}")
                 except Exception as e:
-                    logger.error(f"Exception while handling brightness change for Monitor {idx}: {e}")
+                    show_user_message("Error", f"Failed to adjust brightness for Monitor {idx+1}")
 
 
 class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
@@ -510,36 +500,42 @@ class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
     def on_click(self, reason):
         if reason == self.Trigger:
             self.parent().show_slider(INITIAL_BRIGHTNESS)
+            
 
 
 def main():
     """
     Entry point for the application.
     """
-    ensure_admin()
-    add_to_startup()
-    RetrieveMonitors()
+    try:
+        hide_console()  # Hide console window
+        ensure_admin()
+        add_to_startup()
+        monitors = RetrieveMonitors()
+        
+        if not monitors:
+            show_user_message("Error", "No compatible monitors detected.")
+            return
 
-    app = QtWidgets.QApplication(sys.argv)
-    slider = BrightnessSlider()
+        app = QtWidgets.QApplication(sys.argv)
+        slider = BrightnessSlider()
 
-    # Setup system tray icon using the correct class
-    tray_icon = SystemTrayIcon(parent=slider)
-    tray_icon.show()
-    logger.debug("System tray icon initialized.")
+        # Setup system tray icon using the correct class
+        tray_icon = SystemTrayIcon(parent=slider)
+        tray_icon.show()
 
+        listener = KeyboardListener()
+        listener.brightness_changed.connect(slider.show_slider)
+        listener.start()
 
-    listener = KeyboardListener()
-    listener.brightness_changed.connect(slider.show_slider)
-    logger.debug("Connected brightness_changed signal to slider.show_slider slot.")
-    listener.start()
-    logger.debug("KeyboardListener thread started.")
-
-    sys.exit(app.exec_())
+        sys.exit(app.exec_())
+    except Exception as e:
+        show_user_message("Error", f"Application failed to start: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        logger.error(e)
+        show_user_message("Error", f"Application failed to start: {str(e)}")
         os.system("pause")
