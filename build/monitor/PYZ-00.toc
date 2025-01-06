@@ -348,6 +348,7 @@
    'C:\\Program '
    'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.10_3.10.3056.0_x64__qbz5n2kfra8p0\\lib\\lzma.py',
    'PYMODULE'),
+  ('modules', 'D:\\Projects\\Monitor Brightness\\modules.py', 'PYMODULE'),
   ('monitorcontrol',
    'C:\\Users\\YZ\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.10_qbz5n2kfra8p0\\LocalCache\\local-packages\\Python310\\site-packages\\monitorcontrol\\__init__.py',
    'PYMODULE'),

@@ -7,6 +7,8 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import os
 import logging
 from typing import List
+import winreg
+from modules import create_sun_pixmap
 
 # Constants
 SLIDER_WIDTH = 240
@@ -25,6 +27,7 @@ INACTIVITY_INTERVAL = 2000  # milliseconds
 DEBOUNCE_INTERVAL = 100  # milliseconds
 FADE_IN_DURATION = 300  # milliseconds
 FADE_OUT_DURATION = 1000  # milliseconds
+APP_NAME = "MonitorBrightnessApp"
 
 # Setup logging
 logging.basicConfig(level=logging.DEBUG)
@@ -41,6 +44,7 @@ def ensure_admin():
     """
     Checks if the current process has administrator privileges on Windows.
     If not, attempts to restart the script with admin rights.
+    Ensures this request happens only once by setting a registry key.
     """
     logger.debug("Checking for admin privileges...")
     try:
@@ -51,17 +55,45 @@ def ensure_admin():
         is_admin = False
 
     if not is_admin:
-        logger.debug("Relaunching script with admin rights...")
+        # Check if admin has been requested before
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software", 0, winreg.KEY_READ | winreg.KEY_WRITE)
         try:
-            ctypes.windll.shell32.ShellExecuteW(
-                None, "runas",
-                sys.executable,
-                " ".join(sys.argv),
-                None, 1
-            )
-        except Exception as e:
-            logger.error(f"Failed to relaunch as admin: {e}")
-        sys.exit()
+            winreg.OpenKey(key, APP_NAME)
+            admin_requested = True
+        except FileNotFoundError:
+            admin_requested = False
+
+        if not admin_requested:
+            logger.debug("Relaunching script with admin rights...")
+            try:
+                ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas",
+                    sys.executable,
+                    " ".join([os.path.abspath(sys.argv[0])] + sys.argv[1:]),
+                    None, 1
+                )
+                # Set registry key to indicate admin has been requested
+                app_key = winreg.CreateKey(key, APP_NAME)
+                winreg.SetValueEx(app_key, "AdminRequested", 0, winreg.REG_SZ, "True")
+                winreg.CloseKey(app_key)
+            except Exception as e:
+                logger.error(f"Failed to relaunch as admin: {e}")
+            sys.exit()
+
+def add_to_startup():
+    """
+    Adds the script to Windows startup by creating a registry entry.
+    """
+    try:
+        exe_path = os.path.abspath(sys.argv[0])
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                             r"Software\Microsoft\Windows\CurrentVersion\Run",
+                             0, winreg.KEY_SET_VALUE)
+        winreg.SetValueEx(key, APP_NAME, 0, winreg.REG_SZ, exe_path)
+        winreg.CloseKey(key)
+        logger.debug("Added to startup successfully.")
+    except Exception as e:
+        logger.error(f"Failed to add to startup: {e}")
 
 def RetrieveMonitors() -> List:
     """
@@ -112,7 +144,6 @@ def ChangeBrightness(idx: int, brightness: int):
         logger.debug(f"Brightness set to {brightness} for Monitor {idx}")
     except Exception as e:
         logger.error(f"Exception while setting brightness for Monitor {idx} to {brightness}: {e}")
-        # Optionally, implement fallback mechanisms or notify the user here
     logger.debug(f"Finished setting brightness to: {brightness} for Monitor {idx}")
 
 def RetrieveBrightness():
@@ -134,6 +165,19 @@ def RetrieveBrightness():
             logger.error(f"Error interacting with Monitor {idx}: {e}")
             if hasattr(e, 'response'):
                 logger.debug(f"Raw response: {e.response}")
+
+
+class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
+    def __init__(self, parent=None):
+        sun_icon = create_sun_pixmap(32, 32)
+        super().__init__(QtGui.QIcon(sun_icon), parent)
+        self.setToolTip(APP_NAME)
+        menu = QtWidgets.QMenu(parent)
+        
+
+    def on_click(self, reason):
+        if reason == self.Trigger:
+            self.parent().show_slider(INITIAL_BRIGHTNESS)
 
 class BrightnessSlider(QtWidgets.QWidget):
     """
@@ -277,10 +321,10 @@ class BrightnessSlider(QtWidgets.QWidget):
             QLabel: The label containing the sun pixmap.
         """
         icon_label = QtWidgets.QLabel()
-        pixmap = self.create_sun_pixmap(24, 24)
+        pixmap = create_sun_pixmap(24, 24)  # Using imported function
         icon_label.setPixmap(pixmap)
         return icon_label
-
+    
     def create_percent_label(self) -> QtWidgets.QLabel:
         """
         Creates the label to display current brightness percentage.
@@ -316,52 +360,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         logger.debug("Slider created and initialized.")
         return slider
 
-    def create_sun_pixmap(self, width: int, height: int) -> QtGui.QPixmap:
-        """
-        Creates a sun-shaped QPixmap by drawing with QPainter.
-
-        Args:
-            width (int): Width of the pixmap.
-            height (int): Height of the pixmap.
-
-        Returns:
-            QPixmap: The generated sun icon.
-        """
-        pixmap = QtGui.QPixmap(width, height)
-        pixmap.fill(QtCore.Qt.transparent)  # Start with a transparent pixmap
-
-        painter = QtGui.QPainter(pixmap)
-        painter.setRenderHint(QtGui.QPainter.Antialiasing)
-
-        # Draw the sun's core
-        core_color = QtGui.QColor('yellow')
-        painter.setBrush(core_color)
-        painter.setPen(QtGui.QPen(core_color))
-        center = QtCore.QPoint(width // 2, height // 2)
-        radius = min(width, height) // 4
-        painter.drawEllipse(center, radius, radius)
-
-        # Draw sun rays
-        ray_color = QtGui.QColor('orange')
-        painter.setBrush(QtCore.Qt.NoBrush)
-        painter.setPen(QtGui.QPen(ray_color, 2))
-        num_rays = 8
-        ray_length = min(width, height) // 2
-        for i in range(num_rays):
-            angle = (360 / num_rays) * i
-            radians = math.radians(angle)
-            start_point = QtCore.QPointF(
-                center.x() + radius * math.cos(radians),
-                center.y() + radius * math.sin(radians)
-            )
-            end_point = QtCore.QPointF(
-                center.x() + ray_length * math.cos(radians),
-                center.y() + ray_length * math.sin(radians)
-            )
-            painter.drawLine(start_point, end_point)
-
-        painter.end()
-        return pixmap
 
     def slider_moved(self, value: int):
         """
@@ -374,7 +372,6 @@ class BrightnessSlider(QtWidgets.QWidget):
         """
         logger.debug(f"slider_moved called with value: {value}")
         self.percent_label.setText(f"{value}%")
-
         self.latest_brightness = value
 
         # Reset the inactivity timer every time the user moves the slider
@@ -400,7 +397,7 @@ class BrightnessSlider(QtWidgets.QWidget):
             except Exception as e:
                 logger.error(f"Failed to update brightness for Monitor {idx} to {value}: {e}")
 
-    def show_slider(self, value: int):
+    def show_slider(self, value: int = INITIAL_BRIGHTNESS):
         """
         Called externally (e.g., via KeyboardListener) to show the slider
         and set it to the specified brightness value.
@@ -444,7 +441,7 @@ class BrightnessSlider(QtWidgets.QWidget):
 class KeyboardListener(QtCore.QThread):
     """
     Thread that listens for keyboard events using the 'keyboard' library.
-    Emits 'brightness_changed' signal whenever Page Up or Page Down is pressed.
+    Emits 'brightness_changed' signal whenever Ctrl + Up or Ctrl + Down is pressed.
     """
     brightness_changed = QtCore.pyqtSignal(int)
 
@@ -463,13 +460,15 @@ class KeyboardListener(QtCore.QThread):
             event: The keyboard event.
         """
         if keyboard.is_pressed('ctrl'):
-            logger.debug("Key pressed: Ctrl")
+            logger.debug("Ctrl key is pressed.")
             for idx in list(monitor_brightness.keys()):
                 try:
                     if keyboard.is_pressed('up'):
                         target_brightness = min(monitor_brightness[idx] + 10, 100)
                     elif keyboard.is_pressed('down'):
                         target_brightness = max(monitor_brightness[idx] - 10, 0)
+                    else:
+                        continue  # No relevant key pressed
 
                     # Validate target_brightness
                     if target_brightness < 0 or target_brightness > 100:
@@ -487,26 +486,54 @@ class KeyboardListener(QtCore.QThread):
                 except Exception as e:
                     logger.error(f"Exception while handling brightness change for Monitor {idx}: {e}")
 
+
+class SystemTrayIcon(QtWidgets.QSystemTrayIcon):
+    """
+    System Tray Icon with context menu.
+    """
+    def __init__(self, parent=None):
+        sun_icon = create_sun_pixmap(32, 32)
+        super().__init__(QtGui.QIcon(sun_icon), parent)
+        
+        self.setToolTip(APP_NAME)
+        menu = QtWidgets.QMenu(parent)
+
+        show_action = menu.addAction("Show")
+        quit_action = menu.addAction("Exit")
+
+        show_action.triggered.connect(parent.show_slider)
+        quit_action.triggered.connect(QtWidgets.QApplication.quit)
+
+        self.setContextMenu(menu)
+        self.activated.connect(self.on_click)
+
+    def on_click(self, reason):
+        if reason == self.Trigger:
+            self.parent().show_slider(INITIAL_BRIGHTNESS)
+
+
 def main():
     """
-    Entry point for the application. Ensures admin privileges, retrieves monitors,
-    creates the Qt application, sets up the slider and keyboard listener, and starts
-    the event loop.
+    Entry point for the application.
     """
     ensure_admin()
+    add_to_startup()
     RetrieveMonitors()
 
     app = QtWidgets.QApplication(sys.argv)
     slider = BrightnessSlider()
+
+    # Setup system tray icon using the correct class
+    tray_icon = SystemTrayIcon(parent=slider)
+    tray_icon.show()
+    logger.debug("System tray icon initialized.")
+
 
     listener = KeyboardListener()
     listener.brightness_changed.connect(slider.show_slider)
     logger.debug("Connected brightness_changed signal to slider.show_slider slot.")
     listener.start()
     logger.debug("KeyboardListener thread started.")
-
-    # Optional: Test slider appearance on startup
-    # slider.show_slider(50)
 
     sys.exit(app.exec_())
 
