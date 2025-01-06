@@ -5,29 +5,53 @@ import math
 from monitorcontrol import get_monitors
 from PyQt5 import QtWidgets, QtCore, QtGui
 import os
+import logging
+from typing import List
+
+# Constants
+SLIDER_WIDTH = 240
+SLIDER_HEIGHT = 30
+MARGIN = 20
+SPACING = 10
+PADDING_LEFT = 4
+FONT_STYLE = "12pt 'Segoe UI'"
+LABEL_COLOR = "white"
+WINDOW_OPACITY = 0.0
+INITIAL_BRIGHTNESS = 50
+GEOMETRY_OFFSET_Y = 30
+TICK_INTERVAL = 10
+TICK_POSITION = QtWidgets.QSlider.TicksBelow
+INACTIVITY_INTERVAL = 2000  # milliseconds
+DEBOUNCE_INTERVAL = 100  # milliseconds
+FADE_IN_DURATION = 300  # milliseconds
+FADE_OUT_DURATION = 1000  # milliseconds
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Debug dictionaries to store brightness levels by monitor index
 monitor_brightness = {}
 last_brightness = {}
 
 # Cached list of monitor objects
-cached_monitors = []
+cached_monitors: List = []
 
 def ensure_admin():
     """
     Checks if the current process has administrator privileges on Windows.
     If not, attempts to restart the script with admin rights.
     """
-    print("[DEBUG] Checking for admin privileges...")
+    logger.debug("Checking for admin privileges...")
     try:
         is_admin = ctypes.windll.shell32.IsUserAnAdmin()
-        print(f"[DEBUG] Is user admin: {is_admin}")
+        logger.debug(f"Is user admin: {is_admin}")
     except Exception as e:
-        print(f"[DEBUG] Exception while checking admin status: {e}")
+        logger.error(f"Exception while checking admin status: {e}")
         is_admin = False
 
     if not is_admin:
-        print("[DEBUG] Relaunching script with admin rights...")
+        logger.debug("Relaunching script with admin rights...")
         try:
             ctypes.windll.shell32.ShellExecuteW(
                 None, "runas",
@@ -36,10 +60,10 @@ def ensure_admin():
                 None, 1
             )
         except Exception as e:
-            print(f"[DEBUG] Failed to relaunch as admin: {e}")
+            logger.error(f"Failed to relaunch as admin: {e}")
         sys.exit()
 
-def RetrieveMonitors():
+def RetrieveMonitors() -> List:
     """
     Retrieves the list of monitors, initializes the brightness dictionaries,
     and logs debug information.
@@ -48,10 +72,10 @@ def RetrieveMonitors():
         List of Monitor objects from the monitorcontrol library.
     """
     global cached_monitors
-    print("[DEBUG] Retrieving monitors...")
+    logger.debug("Retrieving monitors...")
     monitors = get_monitors()
     cached_monitors = monitors  # Cache the monitors for later use
-    print(f"[DEBUG] Detected monitors: {monitors}")
+    logger.debug(f"Detected monitors: {monitors}")
 
     for idx, monitor in enumerate(monitors):
         with monitor:
@@ -60,14 +84,14 @@ def RetrieveMonitors():
                 brightness = round(brightness, -1)
                 monitor_brightness[idx] = brightness
                 last_brightness[idx] = brightness
-                print(f"[DEBUG] Monitor {idx} brightness initialized to: {brightness}")
+                logger.debug(f"Monitor {idx} brightness initialized to: {brightness}")
             except Exception as e:
-                print(f"[DEBUG] Error retrieving brightness for Monitor {idx}: {e}")
+                logger.error(f"Error retrieving brightness for Monitor {idx}: {e}")
                 if hasattr(e, 'response'):
-                    print(f"[DEBUG] Raw response: {e.response}")
+                    logger.debug(f"Raw response: {e.response}")
     return monitors
 
-def ChangeBrightness(idx, brightness):
+def ChangeBrightness(idx: int, brightness: int):
     """
     Changes the brightness of the monitor at the given index.
 
@@ -77,39 +101,39 @@ def ChangeBrightness(idx, brightness):
     """
     global cached_monitors
     if idx < 0 or idx >= len(cached_monitors):
-        print(f"[DEBUG] Invalid monitor index: {idx}")
+        logger.debug(f"Invalid monitor index: {idx}")
         return
 
     monitor = cached_monitors[idx]
-    print(f"[DEBUG] Attempting to set brightness of Monitor {idx} to {brightness}...")
+    logger.debug(f"Attempting to set brightness of Monitor {idx} to {brightness}...")
     try:
         with monitor:
             monitor.set_luminance(brightness)
-        print(f"[DEBUG] Brightness set to {brightness} for Monitor {idx}")
+        logger.debug(f"Brightness set to {brightness} for Monitor {idx}")
     except Exception as e:
-        print(f"[DEBUG] Exception while setting brightness for Monitor {idx} to {brightness}: {e}")
+        logger.error(f"Exception while setting brightness for Monitor {idx} to {brightness}: {e}")
         # Optionally, implement fallback mechanisms or notify the user here
-    print(f"[DEBUG] Finished setting brightness to: {brightness} for Monitor {idx}")
+    logger.debug(f"Finished setting brightness to: {brightness} for Monitor {idx}")
 
 def RetrieveBrightness():
     """
     Retrieves current brightness for all monitors and updates the dictionaries.
     """
-    print("[DEBUG] Retrieving current brightness for all monitors...")
+    logger.debug("Retrieving current brightness for all monitors...")
     for idx, monitor in enumerate(cached_monitors):
-        print(f"[DEBUG] Monitor {idx}: {monitor}")
+        logger.debug(f"Monitor {idx}: {monitor}")
         try:
             with monitor:
                 brightness = monitor.get_luminance()
-            print(f"[DEBUG] Current Brightness for Monitor {idx}: {brightness}")
+            logger.debug(f"Current Brightness for Monitor {idx}: {brightness}")
             brightness = round(brightness, -1)
             monitor_brightness[idx] = brightness
             last_brightness[idx] = brightness
-            print(f"[DEBUG] Brightness rounded to: {brightness} for Monitor {idx}")
+            logger.debug(f"Brightness rounded to: {brightness} for Monitor {idx}")
         except Exception as e:
-            print(f"[DEBUG] Error interacting with Monitor {idx}: {e}")
+            logger.error(f"Error interacting with Monitor {idx}: {e}")
             if hasattr(e, 'response'):
-                print(f"[DEBUG] Raw response: {e.response}")
+                logger.debug(f"Raw response: {e.response}")
 
 class BrightnessSlider(QtWidgets.QWidget):
     """
@@ -121,7 +145,7 @@ class BrightnessSlider(QtWidgets.QWidget):
     update_slider_signal = QtCore.pyqtSignal(int)
 
     def __init__(self):
-        print("[DEBUG] Initializing BrightnessSlider...")
+        logger.debug("Initializing BrightnessSlider...")
         super().__init__()
 
         # Keep the window always on top and frameless
@@ -131,68 +155,50 @@ class BrightnessSlider(QtWidgets.QWidget):
             QtCore.Qt.Tool
         )
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
-        self.setWindowOpacity(0.0)  # Start fully transparent
+        self.setWindowOpacity(WINDOW_OPACITY)  # Start fully transparent
 
         # Positioning the slider near the bottom center of the screen
-        screen_geometry = QtWidgets.QApplication.desktop().availableGeometry()
-        slider_width = 240
-        slider_height = 30
-        x = (screen_geometry.width() - slider_width) // 2
-        y = screen_geometry.height() - slider_height - 30
-        self.setGeometry(x, y, slider_width, slider_height)
-        print(f"[DEBUG] Slider geometry set to: x={x}, y={y}, width={slider_width}, height={slider_height}")
+        screen_geometry = QtWidgets.QApplication.primaryScreen().availableGeometry()
+        x = (screen_geometry.width() - SLIDER_WIDTH) // 2
+        y = screen_geometry.height() - SLIDER_HEIGHT - GEOMETRY_OFFSET_Y
+        self.setGeometry(x, y, SLIDER_WIDTH, SLIDER_HEIGHT)
+        logger.debug(f"Slider geometry set to: x={x}, y={y}, width={SLIDER_WIDTH}, height={SLIDER_HEIGHT}")
 
         # Main layout
         layout = QtWidgets.QHBoxLayout()
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
+        layout.setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN)
+        layout.setSpacing(SPACING)
 
         # Insert Custom Icon (Programmatically Drawn)
-        self.icon = QtWidgets.QLabel()
-        pixmap = self.create_sun_pixmap(24, 24)
-        self.icon.setPixmap(pixmap)
+        self.icon = self.create_icon()
         layout.addWidget(self.icon)
 
         # Label to display current brightness percentage
-        self.percent_label = QtWidgets.QLabel("50%")
-        self.percent_label.setStyleSheet("""
-            QLabel {
-                font: 12pt 'Segoe UI';
-                color: white;
-                padding-left: 4px;
-            }
-        """)
+        self.percent_label = self.create_percent_label()
         layout.addWidget(self.percent_label)
 
         # Slider setup
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.slider.setMinimum(0)
-        self.slider.setMaximum(100)
-        self.slider.setValue(50)
-        self.slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.slider.setTickInterval(10)
-        self.slider.setSingleStep(1)
-        self.slider.valueChanged.connect(self.slider_moved)
+        self.slider = self.create_slider()
         layout.addWidget(self.slider)
 
         self.setLayout(layout)
         self.hide()
-        print("[DEBUG] BrightnessSlider initialized and hidden by default.")
+        logger.debug("BrightnessSlider initialized and hidden by default.")
 
         self.update_slider_signal.connect(self.handle_update_slider)
 
         # Timer to hide the slider after inactivity
         self.inactivity_timer = QtCore.QTimer(self)
-        self.inactivity_timer.setInterval(2000)  # 2 seconds of no activity
+        self.inactivity_timer.setInterval(INACTIVITY_INTERVAL)  # 2 seconds of no activity
         self.inactivity_timer.setSingleShot(True)
         self.inactivity_timer.timeout.connect(self.start_fade_out)
 
         # Debounce timer to limit brightness change frequency
         self.debounce_timer = QtCore.QTimer(self)
-        self.debounce_timer.setInterval(100)  # 100 milliseconds
+        self.debounce_timer.setInterval(DEBOUNCE_INTERVAL)  # 100 milliseconds
         self.debounce_timer.setSingleShot(True)
         self.debounce_timer.timeout.connect(self.apply_brightness_change)
-        self.latest_brightness = 50  # Initial brightness
+        self.latest_brightness = INITIAL_BRIGHTNESS  # Initial brightness
 
         # Subtle drop shadow
         shadow = QtWidgets.QGraphicsDropShadowEffect(self)
@@ -201,26 +207,26 @@ class BrightnessSlider(QtWidgets.QWidget):
         shadow.setYOffset(0)
         shadow.setColor(QtGui.QColor(0, 0, 0, 100))
         self.setGraphicsEffect(shadow)
-        print("[DEBUG] Drop shadow effect applied to BrightnessSlider.")
+        logger.debug("Drop shadow effect applied to BrightnessSlider.")
 
         # Apply stylesheet for enhanced styling
         self.apply_stylesheet()
 
         # Fade-in animation
         self.fade_in = QtCore.QPropertyAnimation(self, b"windowOpacity")
-        self.fade_in.setDuration(300)
+        self.fade_in.setDuration(FADE_IN_DURATION)
         self.fade_in.setStartValue(0.0)
         self.fade_in.setEndValue(0.9)
         self.fade_in.setEasingCurve(QtCore.QEasingCurve.InOutQuad)
 
         # Fade-out animation with extended duration
         self.fade_out = QtCore.QPropertyAnimation(self, b"windowOpacity")
-        self.fade_out.setDuration(1000)  # Increased from 700 to 1000 milliseconds
+        self.fade_out.setDuration(FADE_OUT_DURATION)  # Increased from 700 to 1000 milliseconds
         self.fade_out.setStartValue(0.9)
         self.fade_out.setEndValue(0.0)
         self.fade_out.setEasingCurve(QtCore.QEasingCurve.InOutQuad)
         self.fade_out.finished.connect(self.hide)
-        print("[DEBUG] Animations initialized with extended fade-out duration.")
+        logger.debug("Animations initialized with extended fade-out duration.")
 
     def apply_stylesheet(self):
         """
@@ -261,9 +267,56 @@ class BrightnessSlider(QtWidgets.QWidget):
                 border-radius: 4px;
             }
         """)
-        print("[DEBUG] Stylesheet applied to BrightnessSlider.")
+        logger.debug("Stylesheet applied to BrightnessSlider.")
 
-    def create_sun_pixmap(self, width, height):
+    def create_icon(self) -> QtWidgets.QLabel:
+        """
+        Creates the sun icon label.
+
+        Returns:
+            QLabel: The label containing the sun pixmap.
+        """
+        icon_label = QtWidgets.QLabel()
+        pixmap = self.create_sun_pixmap(24, 24)
+        icon_label.setPixmap(pixmap)
+        return icon_label
+
+    def create_percent_label(self) -> QtWidgets.QLabel:
+        """
+        Creates the label to display current brightness percentage.
+
+        Returns:
+            QLabel: The percentage label.
+        """
+        label = QtWidgets.QLabel(f"{INITIAL_BRIGHTNESS}%")
+        label.setStyleSheet(f"""
+            QLabel {{
+                font: {FONT_STYLE};
+                color: {LABEL_COLOR};
+                padding-left: {PADDING_LEFT}px;
+            }}
+        """)
+        return label
+
+    def create_slider(self) -> QtWidgets.QSlider:
+        """
+        Creates and initializes the brightness slider.
+
+        Returns:
+            QSlider: The brightness slider.
+        """
+        slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        slider.setMinimum(0)
+        slider.setMaximum(100)
+        slider.setValue(INITIAL_BRIGHTNESS)
+        slider.setTickPosition(TICK_POSITION)
+        slider.setTickInterval(TICK_INTERVAL)
+        slider.setSingleStep(1)
+        slider.valueChanged.connect(self.slider_moved)
+        logger.debug("Slider created and initialized.")
+        return slider
+
+    def create_sun_pixmap(self, width: int, height: int) -> QtGui.QPixmap:
         """
         Creates a sun-shaped QPixmap by drawing with QPainter.
 
@@ -310,13 +363,16 @@ class BrightnessSlider(QtWidgets.QWidget):
         painter.end()
         return pixmap
 
-    def slider_moved(self, value):
+    def slider_moved(self, value: int):
         """
         Called when the internal slider is manually adjusted.
-        We update the percentage label, reset the inactivity timer,
-        and schedule a brightness update with debounce.
+        Updates the percentage label, resets the inactivity timer,
+        and schedules a brightness update with debounce.
+
+        Args:
+            value (int): The new slider value.
         """
-        print(f"[DEBUG] slider_moved called with value: {value}")
+        logger.debug(f"slider_moved called with value: {value}")
         self.percent_label.setText(f"{value}%")
 
         self.latest_brightness = value
@@ -334,31 +390,37 @@ class BrightnessSlider(QtWidgets.QWidget):
         Applies the brightness change for all monitors to the latest value set by the slider.
         """
         value = self.latest_brightness
-        print(f"[DEBUG] Applying brightness change to: {value}%")
+        logger.debug(f"Applying brightness change to: {value}%")
         for idx in monitor_brightness:
             try:
                 ChangeBrightness(idx, value)
                 monitor_brightness[idx] = value
                 last_brightness[idx] = value
-                print(f"[DEBUG] Updated Monitor {idx} brightness to: {value}")
+                logger.debug(f"Updated Monitor {idx} brightness to: {value}")
             except Exception as e:
-                print(f"[DEBUG] Failed to update brightness for Monitor {idx} to {value}: {e}")
+                logger.error(f"Failed to update brightness for Monitor {idx} to {value}: {e}")
 
-    def show_slider(self, value):
+    def show_slider(self, value: int):
         """
         Called externally (e.g., via KeyboardListener) to show the slider
         and set it to the specified brightness value.
+
+        Args:
+            value (int): The brightness value to set.
         """
-        print(f"[DEBUG] show_slider called with value: {value}")
+        logger.debug(f"show_slider called with value: {value}")
         self.update_slider_signal.emit(value)
 
     @QtCore.pyqtSlot(int)
-    def handle_update_slider(self, value):
+    def handle_update_slider(self, value: int):
         """
         Slot that handles updating the slider from an external signal.
         If the slider is hidden, fade in. If visible, just update the value.
+
+        Args:
+            value (int): The brightness value to set.
         """
-        print(f"[DEBUG] handle_update_slider called with value: {value}")
+        logger.debug(f"handle_update_slider called with value: {value}")
         if not self.isVisible():
             self.setWindowOpacity(0.0)
             self.show()
@@ -370,13 +432,13 @@ class BrightnessSlider(QtWidgets.QWidget):
         # Reset inactivity timer to keep it on screen while user is active
         self.inactivity_timer.stop()
         self.inactivity_timer.start()
-        print("[DEBUG] Inactivity timer reset.")
+        logger.debug("Inactivity timer reset.")
 
     def start_fade_out(self):
         """
         Initiates the fade-out animation after a period of inactivity.
         """
-        print("[DEBUG] Starting fade-out animation.")
+        logger.debug("Starting fade-out animation.")
         self.fade_out.start()
 
 class KeyboardListener(QtCore.QThread):
@@ -387,40 +449,43 @@ class KeyboardListener(QtCore.QThread):
     brightness_changed = QtCore.pyqtSignal(int)
 
     def run(self):
-        print("[DEBUG] KeyboardListener thread started.")
+        logger.debug("KeyboardListener thread started.")
         keyboard.on_press(self.on_key_press)
         keyboard.wait()
-        print("[DEBUG] KeyboardListener thread ending.")
+        logger.debug("KeyboardListener thread ending.")
 
     def on_key_press(self, event):
         """
         Handles key press events. If Ctrl + Up or Ctrl + Down is pressed, adjust the
         brightness of all monitors and emit the 'brightness_changed' signal.
+
+        Args:
+            event: The keyboard event.
         """
         if keyboard.is_pressed('ctrl'):
-            print(f"[DEBUG] Key pressed: Ctrl")
+            logger.debug("Key pressed: Ctrl")
             for idx in list(monitor_brightness.keys()):
                 try:
                     if keyboard.is_pressed('up'):
-                        TargetBrightness = min(monitor_brightness[idx] + 10, 100)
+                        target_brightness = min(monitor_brightness[idx] + 10, 100)
                     elif keyboard.is_pressed('down'):
-                        TargetBrightness = max(monitor_brightness[idx] - 10, 0)
+                        target_brightness = max(monitor_brightness[idx] - 10, 0)
 
-                    # Validate TargetBrightness
-                    if TargetBrightness < 0 or TargetBrightness > 100:
-                        print(f"[DEBUG] TargetBrightness {TargetBrightness} is out of bounds for Monitor {idx}. Skipping.")
+                    # Validate target_brightness
+                    if target_brightness < 0 or target_brightness > 100:
+                        logger.debug(f"TargetBrightness {target_brightness} is out of bounds for Monitor {idx}. Skipping.")
                         continue
 
-                    if TargetBrightness != last_brightness.get(idx, -1):
-                        ChangeBrightness(idx, TargetBrightness)
-                        monitor_brightness[idx] = TargetBrightness
-                        last_brightness[idx] = TargetBrightness
-                        print(f"[DEBUG] Brightness for Monitor {idx} set to {TargetBrightness}")
+                    if target_brightness != last_brightness.get(idx, -1):
+                        ChangeBrightness(idx, target_brightness)
+                        monitor_brightness[idx] = target_brightness
+                        last_brightness[idx] = target_brightness
+                        logger.debug(f"Brightness for Monitor {idx} set to {target_brightness}")
                         # Emit signal to update the slider
-                        self.brightness_changed.emit(TargetBrightness)
-                        print(f"[DEBUG] brightness_changed signal emitted with value: {TargetBrightness}")
+                        self.brightness_changed.emit(target_brightness)
+                        logger.debug(f"brightness_changed signal emitted with value: {target_brightness}")
                 except Exception as e:
-                    print(f"[DEBUG] Exception while handling brightness change for Monitor {idx}: {e}")
+                    logger.error(f"Exception while handling brightness change for Monitor {idx}: {e}")
 
 def main():
     """
@@ -436,9 +501,9 @@ def main():
 
     listener = KeyboardListener()
     listener.brightness_changed.connect(slider.show_slider)
-    print("[DEBUG] Connected brightness_changed signal to slider.show_slider slot.")
+    logger.debug("Connected brightness_changed signal to slider.show_slider slot.")
     listener.start()
-    print("[DEBUG] KeyboardListener thread started.")
+    logger.debug("KeyboardListener thread started.")
 
     # Optional: Test slider appearance on startup
     # slider.show_slider(50)
@@ -449,5 +514,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(e)
         os.system("pause")
