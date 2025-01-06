@@ -2,10 +2,15 @@
 
 A Windows system tray application for controlling monitor brightness across multiple displays. Features a modern Windows 11-style UI with smooth animations and global hotkeys.
 
+## Showcase 
+
+![Light Mode](images/preview1.png)
+![Dark Mode](images/preview2.png)
+
 ## Download
 
-EXE version provided 
-Clone to build fron source
+- EXE version provided 
+- Clone to build fron source
 
 ## Features
 
