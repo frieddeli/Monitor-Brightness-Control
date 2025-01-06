@@ -1,3 +1,0 @@
-Goals:
-1. Must be able use the fn+ left / right arrow to decrease / increase brightness 
-2. make the monitor show it is the one selected by having the brightness popup show on only that screen 
