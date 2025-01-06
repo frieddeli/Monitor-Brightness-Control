@@ -1,6 +1,5 @@
 import ctypes
 import sys
-import threading
 import keyboard
 import math
 from monitorcontrol import get_monitors
@@ -136,8 +135,8 @@ class BrightnessSlider(QtWidgets.QWidget):
 
         # Positioning the slider near the bottom center of the screen
         screen_geometry = QtWidgets.QApplication.desktop().availableGeometry()
-        slider_width = 400
-        slider_height = 60
+        slider_width = 240
+        slider_height = 30
         x = (screen_geometry.width() - slider_width) // 2
         y = screen_geometry.height() - slider_height - 30
         self.setGeometry(x, y, slider_width, slider_height)
@@ -145,12 +144,12 @@ class BrightnessSlider(QtWidgets.QWidget):
 
         # Main layout
         layout = QtWidgets.QHBoxLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(10)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
 
         # Insert Custom Icon (Programmatically Drawn)
         self.icon = QtWidgets.QLabel()
-        pixmap = self.create_sun_pixmap(32, 32)
+        pixmap = self.create_sun_pixmap(24, 24)
         self.icon.setPixmap(pixmap)
         layout.addWidget(self.icon)
 
@@ -158,9 +157,9 @@ class BrightnessSlider(QtWidgets.QWidget):
         self.percent_label = QtWidgets.QLabel("50%")
         self.percent_label.setStyleSheet("""
             QLabel {
-                font: 14pt 'Segoe UI';
+                font: 12pt 'Segoe UI';
                 color: white;
-                padding-left: 8px;
+                padding-left: 4px;
             }
         """)
         layout.addWidget(self.percent_label)
@@ -230,7 +229,7 @@ class BrightnessSlider(QtWidgets.QWidget):
         self.setStyleSheet("""
             BrightnessSlider {
                 background-color: rgba(30, 30, 30, 220);
-                border-radius: 15px;
+                border-radius: 30px;
             }
             QSlider::groove:horizontal {
                 border: 1px solid #bbb;
@@ -447,4 +446,8 @@ def main():
     sys.exit(app.exec_())
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        os.system("pause")
