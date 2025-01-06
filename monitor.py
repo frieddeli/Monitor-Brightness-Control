@@ -139,7 +139,7 @@ class BrightnessSlider(QtWidgets.QWidget):
         slider_width = 400
         slider_height = 60
         x = (screen_geometry.width() - slider_width) // 2
-        y = screen_geometry.height() - slider_height - 150
+        y = screen_geometry.height() - slider_height - 30
         self.setGeometry(x, y, slider_width, slider_height)
         print(f"[DEBUG] Slider geometry set to: x={x}, y={y}, width={slider_width}, height={slider_height}")
 
@@ -395,16 +395,16 @@ class KeyboardListener(QtCore.QThread):
 
     def on_key_press(self, event):
         """
-        Handles key press events. If Page Up or Page Down is pressed, adjust the
+        Handles key press events. If Ctrl + Up or Ctrl + Down is pressed, adjust the
         brightness of all monitors and emit the 'brightness_changed' signal.
         """
-        if event.name in ['page up', 'page down']:
-            print(f"[DEBUG] Key pressed: {event.name}")
+        if keyboard.is_pressed('ctrl'):
+            print(f"[DEBUG] Key pressed: Ctrl")
             for idx in list(monitor_brightness.keys()):
                 try:
-                    if event.name == 'page up':
+                    if keyboard.is_pressed('up'):
                         TargetBrightness = min(monitor_brightness[idx] + 10, 100)
-                    else:
+                    elif keyboard.is_pressed('down'):
                         TargetBrightness = max(monitor_brightness[idx] - 10, 0)
 
                     # Validate TargetBrightness
