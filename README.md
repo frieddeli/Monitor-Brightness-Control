@@ -16,7 +16,7 @@ A Windows system tray application for controlling monitor brightness across mult
 
 ✨ Modern floating slider UI with animations  
 🎮 Global hotkeys (Ctrl + Up/Down)  
-🖥️ Multi-monitor support  
+🖥️ Multi-monitor support (Including external monitors! )
 🚀 Auto-starts with Windows  
 🎯 System tray integration  
 ⚙️ DDC/CI monitor control
@@ -45,6 +45,7 @@ A Windows system tray application for controlling monitor brightness across mult
 
 ### Known Issues
 - Some monitors may not support DDC/CI
+- Reccommended to use HDMI as DP cables might face some issues 
 - Requires admin privileges for first run
 - May need manual startup addition on some systems
 
