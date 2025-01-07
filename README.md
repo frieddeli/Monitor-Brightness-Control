@@ -45,6 +45,7 @@ A Windows system tray application for controlling monitor brightness across mult
 - Efficient debounced brightness control
 
 ### Known Issues
+- Could take up to 30 seconds to start again after a restart
 - Some monitors may not support DDC/CI
 - Reccommended to use HDMI as DP cables might face some issues 
 - Requires admin privileges for first run
