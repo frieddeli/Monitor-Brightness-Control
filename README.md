@@ -1,6 +1,6 @@
 # Monitor Brightness Control
 
-A Windows system tray application for controlling monitor brightness across multiple displays. Features a modern Windows 11-style UI with smooth animations and global hotkeys.
+A Windows system tray application for controlling monitor brightness across multiple displays. Features a modern Windows 11-style UI with smooth animations and global hotkeys. The goal is to produce a mininalistic brightness slider similar to the one found on windows laptops.
 
 ## Showcase 
 
@@ -20,6 +20,7 @@ A Windows system tray application for controlling monitor brightness across mult
 🚀 Auto-starts with Windows  
 🎯 System tray integration  
 ⚙️ DDC/CI monitor control
+👆 Click to drag slider
 
 ## Usage
 
